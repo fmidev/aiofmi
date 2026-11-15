@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExceptionReport xmlns="http://www.opengis.net/ows/1.1"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.opengis.net/ows/1.1 http://schemas.opengis.net/ows/1.1.0/owsExceptionReport.xsd"
+  version="2.0.0" xml:lang="eng">
+
+
+  <Exception exceptionCode="OperationParsingFailed">
+    <ExceptionText>Unknown parameter &apos;NoSuchParam&apos;</ExceptionText>
+    <ExceptionText>URI: /wfs?latlon=60.1699%2C24.9384&amp;parameters=Temperature%2CNoSuchParam&amp;request=getFeature&amp;service=WFS&amp;storedquery_id=fmi%3A%3Aforecast%3A%3Aedited%3A%3Aweather%3A%3Ascandinavia%3A%3Apoint%3A%3Amultipointcoverage&amp;version=2.0.0</ExceptionText>
+    
+  </Exception>
+
+</ExceptionReport>

@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aiofmi"
+version = "0.1.0"
+description = "Async client for the Finnish Meteorological Institute's open data"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.14"
+authors = [{ name = "Finnish Meteorological Institute" }]
+keywords = ["fmi", "weather", "forecast", "asyncio", "aiohttp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Framework :: aiohttp",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Typing :: Typed",
+]
+dependencies = ["aiohttp>=3.13"]
+
+[project.urls]
+Repository = "https://github.com/fmidev/aiofmi"
+Issues = "https://github.com/fmidev/aiofmi/issues"
+Changelog = "https://github.com/fmidev/aiofmi/releases"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4",
+    "pytest>=9.0",
+    "pytest-asyncio>=1.4",
+    "pytest-cov>=7.0",
+    "ruff>=0.17",
+]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/README.md", "/LICENSE"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["--strict-markers", "--strict-config", "--cov=aiofmi", "--cov-report=term-missing"]
+xfail_strict = true
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+
+[tool.mypy]
+strict = true
+files = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "COM812", # conflicts with the formatter
+    "CPY001", # the licence is in LICENSE
+    "D203",   # conflicts with D211
+    "D213",   # conflicts with D212
+    "TC",     # dataclass field types must stay importable at runtime
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "S101",    # assert is how pytest works
+    "PLR2004", # literal values are the point of an expectation
+]

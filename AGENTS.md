@@ -95,7 +95,6 @@ unless this project also ends up GPL.
 |---|---|---|
 | `fmi-weather-client` (PyPI; Codeberg `saaste`) | GPL-3.0 | Sync `requests`, `async_*` names are executor wrappers, no `py.typed`. What the existing custom integration uses. |
 | `pnuu/fmiopendata` | GPL-3.0-or-later | General WFS/WMS toolkit with numpy. Good reference for station and multipoint parsing. Its author is a colleague of the user. |
-| `kipe/fmi` | MIT | Small, sync, HTML-parser based. |
 | `kogeler/fmi-hass-custom` | MIT | Custom integration, domain `fmi`. Wraps `fmi-weather-client` and adds gust and probability parameters; its `fmi_client.py` shows which fields an integration ends up needing. |
 | `jesmak/fmi` | MIT | Custom integration, domain `fmi_open_data`. Its `session.py` has careful WFS error handling and coverage parsing. |
 | `pyforeca` (PyPI) | not checked | The library behind core's Foreca integration. Not yet read; worth studying as an accepted example of the same shape. |
