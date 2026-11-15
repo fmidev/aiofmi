@@ -130,8 +130,9 @@ Verified against the live service on 2026-11-15 unless marked otherwise.
   (observations are limited to 168 hours).
 - Native resolution appears to be hourly to about +36 h, then 3-hourly, then
   6-hourly; the server interpolates onto the requested step.
-- `timestep` must be a value the server accepts (60, 180 and 1440 work, 7 does
-  not). Steps align to 00:00 UTC, so `timestep=1440` cannot give local days.
+- The client always asks for `timestep=60`. `Precipitation1h` stays a one-hour
+  value at any step, so sums over a coarser or finer series are wrong. Steps
+  align to 00:00 UTC, so `timestep=1440` cannot give local days.
 - `WindGust` is always `NaN` in this product; `HourlyMaximumGust` has values.
 - Field names in `swe:field` echo the spelling of the request.
 - The response gives the IANA time zone of the point (`target:timezone`) and a

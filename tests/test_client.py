@@ -77,7 +77,6 @@ async def test_forecast_request(client: FmiClient, fmi: FakeFmi) -> None:
         *HELSINKI,
         start=datetime(2026, 11, 15, 23, tzinfo=timezone(timedelta(hours=2))),
         end=datetime(2026, 11, 17, 21, tzinfo=UTC),
-        timestep=timedelta(hours=3),
     )
 
     assert fmi.requests == [
@@ -91,7 +90,7 @@ async def test_forecast_request(client: FmiClient, fmi: FakeFmi) -> None:
             "latlon": "60.1699,24.9384",
             "starttime": "2026-11-15T21:00:00Z",
             "endtime": "2026-11-17T21:00:00Z",
-            "timestep": "180",
+            "timestep": "60",
             "parameters": (
                 "Temperature,FeelsLike,DewPoint,Humidity,Pressure,WindSpeedMS,"
                 "WindDirection,HourlyMaximumGust,TotalCloudCover,Precipitation1h,"
@@ -148,8 +147,8 @@ async def test_forecast_other_timezone(client: FmiClient, fmi: FakeFmi) -> None:
         ({"latitude": float("nan"), "longitude": 25}, "Invalid coordinates"),
         ({"start": datetime(2026, 11, 15, 21)}, "timezone-aware"),  # noqa: DTZ001
         ({"start": START, "end": START}, "after the start"),
-        ({"timestep": timedelta(0)}, "timestep"),
-        ({"timestep": timedelta(seconds=90)}, "timestep"),
+        ({"end": datetime(2099, 1, 1)}, "timezone-aware"),  # noqa: DTZ001
+        ({"start": datetime(2026, 11, 15), "end": START}, "timezone-aware"),  # noqa: DTZ001
     ],
 )
 async def test_forecast_invalid_arguments(
@@ -171,7 +170,7 @@ async def test_no_data(client: FmiClient, fmi: FakeFmi) -> None:
     with pytest.raises(FmiNoDataError) as excinfo:
         await client.forecast(0, 0)
 
-    assert str(excinfo.value) == "No data available for '0,0'!"
+    assert str(excinfo.value) == "FMI has no forecast for the requested location"
     assert excinfo.value.code == "OperationParsingFailed"
 
 
@@ -222,6 +221,8 @@ def _edited(old: str, new: str, fixture: str = "forecast_copenhagen.xml") -> byt
         (load_fixture("empty.xml"), 200, "without a forecast"),
         (b"<html>not closed", 200, "not valid XML"),
         (b"<html>not closed", 400, "not valid XML"),
+        (b'<?xml version="1.0" encoding="no-such"?><a/>', 200, "not valid XML"),
+        (b'<?xml version="1.0" encoding="shift_jis"?><a/>', 200, "not valid XML"),
         (b"<ExceptionReport/>", 400, "without giving a reason"),
         (load_fixture("error_forbidden.html"), 403, "HTTP status 403"),
         (b"", 503, "HTTP status 503"),
@@ -277,7 +278,13 @@ async def test_missing_analysis_time(client: FmiClient, fmi: FakeFmi) -> None:
 
 @pytest.mark.parametrize(
     ("headers", "retry_after"),
-    [({"Retry-After": "120"}, 120.0), ({"Retry-After": "later"}, None), ({}, None)],
+    [
+        ({"Retry-After": "120"}, 120.0),
+        ({"Retry-After": "later"}, None),
+        ({"Retry-After": "nan"}, None),
+        ({"Retry-After": "-5"}, None),
+        ({}, None),
+    ],
 )
 async def test_rate_limit(
     client: FmiClient, fmi: FakeFmi, headers: dict[str, str], retry_after: float | None
@@ -319,6 +326,33 @@ async def test_connection_error(session: ClientSession, unused_tcp_port: int) ->
     assert not isinstance(excinfo.value, FmiTimeoutError)
 
 
+async def test_session_raising_for_status(fmi: FakeFmi, client: FmiClient) -> None:
+    """A session set to raise for HTTP errors does not change the error raised."""
+    fmi.respond("error_no_data.xml", status=400)
+    async with ClientSession(raise_for_status=True) as session:
+        strict = FmiClient(session, url=client._url)  # noqa: SLF001
+        with pytest.raises(FmiNoDataError):
+            await strict.forecast(0, 0)
+
+
+async def test_garbled_response(session: ClientSession) -> None:
+    """A broken HTTP answer raises FmiConnectionError without the request URL."""
+
+    async def garbage(_: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        writer.write(b"garbage\r\n\r\n")
+        await writer.drain()
+        writer.close()
+
+    server = await asyncio.start_server(garbage, "127.0.0.1", 0)
+    async with server:
+        port = server.sockets[0].getsockname()[1]
+        client = FmiClient(session, url=f"http://127.0.0.1:{port}/wfs")
+        with pytest.raises(FmiConnectionError) as excinfo:
+            await client.forecast(*HELSINKI)
+
+    assert "latlon" not in str(excinfo.value)
+
+
 async def test_session_left_open(
     client: FmiClient, fmi: FakeFmi, session: ClientSession
 ) -> None:
@@ -328,3 +362,12 @@ async def test_session_left_open(
     await client.forecast(*HELSINKI)
 
     assert not session.closed
+
+
+async def test_analysis_time_without_offset(client: FmiClient, fmi: FakeFmi) -> None:
+    """An analysis time without an offset is read as UTC."""
+    fmi.body = _edited("2026-11-15T19:51:00Z", "2026-11-15T19:51:00")
+
+    forecast = await client.forecast(55.6761, 12.5683)
+
+    assert forecast.issued == datetime(2026, 11, 15, 19, 51, tzinfo=UTC)

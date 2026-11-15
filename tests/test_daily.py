@@ -135,6 +135,7 @@ def test_aggregates() -> None:
     assert second.wind_direction is None
     assert second.wind_gust is None
     assert second.smart_symbol is None
+    assert second.symbol is None
 
 
 def test_missing_values() -> None:
@@ -178,6 +179,37 @@ def test_daylight_saving_change() -> None:
         (date(2026, 10, 25), 25),
         (date(2026, 10, 26), 24),
     ]
+
+
+def test_symbol_prefers_daytime() -> None:
+    """The day's symbol comes from a daytime point when there is one."""
+    day = datetime(2026, 11, 16, tzinfo=HELSINKI)
+    evening = _forecast(
+        _point(day.replace(hour=22), smart_symbol=107),
+        _point(day.replace(hour=23), smart_symbol=131),
+    )
+    mixed = _forecast(
+        _point(day.replace(hour=9), smart_symbol=21),
+        _point(day.replace(hour=13), smart_symbol=2),
+        _point(day.replace(hour=15), smart_symbol=1),
+        _point(day.replace(hour=16), smart_symbol=107),
+    )
+
+    (night,) = daily_forecasts(evening)
+    assert night.smart_symbol == 107
+    assert night.symbol == 7
+    # 13:00 and 15:00 are equally close to 14:00; the earlier one is used.
+    assert daily_forecasts(mixed)[0].smart_symbol == 2
+
+
+def test_unknown_timezone() -> None:
+    """A time zone name the system does not know asks for an explicit one."""
+    forecast = _forecast(
+        _point(datetime(2026, 7, 1, tzinfo=UTC)), timezone="Mars/Olympus"
+    )
+
+    with pytest.raises(ValueError, match="time zone"):
+        daily_forecasts(forecast)
 
 
 def test_no_timezone() -> None:

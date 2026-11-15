@@ -41,4 +41,4 @@ class FmiRequestError(FmiError):
 
 
 class FmiNoDataError(FmiRequestError):
-    """The service has no data for the requested location."""
+    """The service has no data for the requested location or time range."""

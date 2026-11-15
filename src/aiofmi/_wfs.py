@@ -31,7 +31,7 @@ _NO_DATA_PREFIX = "No data available for"
 def _parse_xml(body: bytes) -> ET.Element:
     try:
         return ET.fromstring(body)  # noqa: S314 - the only input is FMI's own service
-    except ET.ParseError as err:
+    except (ET.ParseError, LookupError, ValueError) as err:
         msg = "FMI returned a response that is not valid XML"
         raise FmiResponseError(msg) from err
 
@@ -56,7 +56,10 @@ def parse_exception_report(body: bytes) -> FmiRequestError:
     message = " ".join(texts) or "FMI rejected the request"
     code = exception.get("exceptionCode")
     if message.startswith(_NO_DATA_PREFIX):
-        return FmiNoDataError(message, code=code)
+        # The service's own text names the place or its coordinates.
+        return FmiNoDataError(
+            "FMI has no forecast for the requested location", code=code
+        )
     return FmiRequestError(message, code=code)
 
 
@@ -65,8 +68,11 @@ def _time(parent: ET.Element, path: str) -> datetime | None:
     if text is None:
         return None
     try:
-        return datetime.fromisoformat(text).astimezone(UTC)
-    except ValueError:
+        value = datetime.fromisoformat(text)
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+    except ValueError, OverflowError:
         return None
 
 

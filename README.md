@@ -45,7 +45,7 @@ asyncio.run(main())
 
 The client never creates or closes a session.
 
-### `await client.forecast(latitude, longitude, *, start=None, end=None, timestep=timedelta(hours=1))`
+### `await client.forecast(latitude, longitude, *, start=None, end=None)`
 
 Returns a `Forecast`:
 
@@ -81,10 +81,15 @@ Groups the points by calendar day and returns `DailyForecast`s with
 `temperature_max`, `temperature_min`, `precipitation` (sum),
 `precipitation_probability` (highest), `wind_speed` (highest),
 `wind_direction` (at the highest wind speed), `wind_gust` (highest),
-`smart_symbol` (of the point closest to 14:00) and the day's `points`.
+`smart_symbol` (of the daytime point closest to 14:00; `symbol` is the code
+without the night offset) and the day's `points`.
 
 Days are those of `tz`, by default the time zone of the forecast location.
-The first and last day cover only the hours the series contains.
+Looking that up reads the system's time zone database, so pass `tz` when
+calling from an event loop. The first and last day cover only the hours the
+series contains; check `len(day.points)` if partial days matter. Each
+precipitation value covers the preceding hour and counts towards the day in
+which that hour began.
 
 ### Errors
 
@@ -97,7 +102,7 @@ All derive from `FmiError`.
 | `FmiRateLimitError` | HTTP 429. `retry_after` holds the wait in seconds, if given. |
 | `FmiResponseError` | An unexpected HTTP status (`status`) or an unreadable response. |
 | `FmiRequestError` | FMI rejected the request. `code` holds the OWS exception code. |
-| `FmiNoDataError` | No forecast for the location, typically because it is outside the forecast area. Subclass of `FmiRequestError`. |
+| `FmiNoDataError` | No forecast for the location (it is outside the forecast area) or for the time range. Subclass of `FmiRequestError`. |
 
 Invalid arguments raise `ValueError` before any request is made.
 

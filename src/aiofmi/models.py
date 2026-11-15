@@ -86,7 +86,8 @@ class DailyForecast:
 
     date: date
     points: tuple[ForecastPoint, ...]
-    """The points of the day that the aggregates were computed from."""
+    """The points of the day. Precipitation also counts the next midnight's point
+    instead of the day's first, as each value covers the preceding hour."""
     temperature_max: float | None
     """Highest temperature, °C."""
     temperature_min: float | None
@@ -102,4 +103,14 @@ class DailyForecast:
     wind_gust: float | None
     """Highest gust, m/s."""
     smart_symbol: int | None
-    """SmartSymbol code of the point closest to 14:00 local time."""
+    """SmartSymbol code of the daytime point closest to 14:00 local time.
+
+    When the sun does not rise during the day's points, a night-time code.
+    """
+
+    @property
+    def symbol(self) -> int | None:
+        """SmartSymbol code without the night offset."""
+        if self.smart_symbol is None:
+            return None
+        return self.smart_symbol % _NIGHT_OFFSET

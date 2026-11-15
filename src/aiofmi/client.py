@@ -1,6 +1,7 @@
 """Client for FMI's open data WFS service."""
 
 import asyncio
+import math
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 
@@ -25,17 +26,17 @@ _MAX_LONGITUDE = 180
 
 
 def _format_time(value: datetime) -> str:
-    if value.tzinfo is None:
-        msg = "Times must be timezone-aware"
-        raise ValueError(msg)
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _retry_after(value: str | None) -> float | None:
     try:
-        return float(value) if value is not None else None
+        seconds = float(value) if value is not None else None
     except ValueError:
         return None
+    if seconds is None or not math.isfinite(seconds) or seconds < 0:
+        return None
+    return seconds
 
 
 class FmiClient:
@@ -60,13 +61,12 @@ class FmiClient:
         *,
         start: datetime | None = None,
         end: datetime | None = None,
-        timestep: timedelta = timedelta(hours=1),
     ) -> Forecast:
         """Fetch FMI's official forecast for a point in Finland or nearby.
 
-        The series runs from ``start`` (default: the beginning of the current
-        hour) to ``end`` (default: ten days after ``start``) or to the end of
-        the forecast, whichever comes first.
+        The hourly series runs from ``start`` (default: the beginning of the
+        current hour) to ``end`` (default: ten days after ``start``) or to the
+        end of the forecast, whichever comes first.
         """
         if not (
             -_MAX_LATITUDE <= latitude <= _MAX_LATITUDE
@@ -78,12 +78,11 @@ class FmiClient:
             start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
         if end is None:
             end = start + timedelta(days=10)
+        if start.utcoffset() is None or end.utcoffset() is None:
+            msg = "Times must be timezone-aware"
+            raise ValueError(msg)
         if end <= start:
             msg = "The end time must be after the start time"
-            raise ValueError(msg)
-        minutes, remainder = divmod(timestep.total_seconds(), 60)
-        if minutes < 1 or remainder:
-            msg = "The timestep must be a positive number of whole minutes"
             raise ValueError(msg)
         params = {
             "service": "WFS",
@@ -93,7 +92,7 @@ class FmiClient:
             "latlon": f"{latitude},{longitude}",
             "starttime": _format_time(start),
             "endtime": _format_time(end),
-            "timestep": str(int(minutes)),
+            "timestep": "60",
             "parameters": ",".join(FORECAST_PARAMETERS.values()),
         }
         return parse_forecast(await self._get(params))
@@ -102,7 +101,9 @@ class FmiClient:
         try:
             async with (
                 asyncio.timeout(self._request_timeout),
-                self._session.get(self._url, params=params) as response,
+                self._session.get(
+                    self._url, params=params, raise_for_status=False
+                ) as response,
             ):
                 status = response.status
                 retry_after = response.headers.get("Retry-After")
@@ -111,7 +112,8 @@ class FmiClient:
             msg = "Timeout while connecting to FMI"
             raise FmiTimeoutError(msg) from err
         except ClientError as err:
-            msg = f"Error while connecting to FMI: {err}"
+            # The text of the error can contain the request URL with its coordinates.
+            msg = f"Error while connecting to FMI ({type(err).__name__})"
             raise FmiConnectionError(msg) from err
 
         if status == HTTPStatus.OK:
