@@ -28,7 +28,6 @@ def _format_time(value: datetime) -> str:
     if value.tzinfo is None:
         msg = "Times must be timezone-aware"
         raise ValueError(msg)
-    # A "+00:00" suffix would reach the service as a space.
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 

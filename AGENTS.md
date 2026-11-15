@@ -2,19 +2,19 @@
 
 `aiofmi` is an async Python client for the Finnish Meteorological Institute's
 (FMI) open data. It exists to be the dependency of a new Home Assistant **core**
-weather integration for FMI. The repository was created on 2026-11-15 and is
-empty apart from this file; the first job is to build the library.
+weather integration for FMI.
 
-Keep this file up to date as decisions are made and the code takes shape.
+Keep this file up to date as decisions are made and the code changes.
 
 ## The plan
 
-1. **This repo:** the client library. Forecast by coordinates first. Publish to
-   PyPI as `aiofmi` (the name was free on 2026-11-15).
+1. **This repo:** the client library. Forecast by coordinates is implemented
+   (0.1.0, not yet released). Publish to PyPI as `aiofmi` (the name was free
+   on 2026-11-15).
 2. **In a fork of `home-assistant/core`:** a weather entity per location with a
-   config flow and tests, submitted at Bronze. Foreca (added in HA 2026.11) is
-   the model: one weather entity per location, home location by default, more
-   locations added later, 30-minute polling.
+   config flow and tests, submitted at Bronze with the weather platform only.
+   Foreca (added in HA 2026.11, library `pyforeca`) is the model: 30-minute
+   polling, one coordinator per location, `SingleCoordinatorWeatherEntity`.
 3. **Follow-up PRs** raise the integration's quality-scale tier. The target is
    Platinum.
 
@@ -24,23 +24,64 @@ sync before use. Core ships its own agent skills under `.claude/skills/`
 (`ha-integration-knowledge`, `ha-quality-scale-verify`, `ha-review`), which
 load when working inside a core checkout.
 
-## What Platinum requires of this library
+## Working on the code
 
-These three rules are the reason the library exists; none may be compromised.
+```sh
+uv sync                                              # environment
+uv run pytest                                        # tests; coverage must stay at 100 %
+uv run ruff check . && uv run ruff format --check .  # lint and format
+uv run mypy                                          # strict, over src and tests
+```
+
+- `src/aiofmi/client.py`: `FmiClient`, the HTTP request and status handling.
+- `src/aiofmi/_wfs.py`: XML parsing. All knowledge of the WFS format lives here.
+- `src/aiofmi/daily.py`: `daily_forecasts`, aggregation by local day.
+- `src/aiofmi/models.py`, `exceptions.py`: the public types.
+- `tests/fixtures/`: responses recorded from the live service on 2026-11-15.
+  Record new ones with `curl` instead of writing them by hand; a hand-written
+  fixture cost the Foreca PR a review round.
+- Tests use a local `aiohttp` test server through the client's `url` argument;
+  there is no HTTP mocking library.
+
+**Releasing:** bump `version` in `pyproject.toml` (`uv version --bump ...`),
+commit, and publish a GitHub release tagged `vX.Y.Z` with release notes.
+`.github/workflows/release.yml` builds and uploads to PyPI with Trusted
+Publishing. One-time setup, not yet done: register a pending trusted publisher
+on PyPI for `aiofmi` (repository `fmidev/aiofmi`, workflow `release.yml`,
+environment `pypi`) and create the `pypi` environment in the repository.
+
+## What Home Assistant requires of this library
+
+These three Platinum rules are the reason the library exists; none may be
+compromised.
 
 - **`async-dependency`:** real asyncio I/O. No sync HTTP wrapped in an executor.
 - **`inject-websession`:** every entry point takes the caller's
   `aiohttp.ClientSession`. The library never creates or closes a session.
-- **`strict-typing`:** fully typed, passes mypy strict, and ships `py.typed`
-  (PEP 561). The rule has no exceptions, and hassfest checks the marker.
+- **`strict-typing`:** fully typed, passes mypy strict, and ships
+  `aiofmi/py.typed`. The rule has no exceptions, and hassfest checks the wheel.
 
-Other things core expects of a dependency: a release on PyPI built from a
-public repository with tagged releases, an OSI-approved licence, and few
-runtime dependencies. Home Assistant requires Python 3.14, so there is no
-need to support anything older.
+Checked by core's tooling on every requirement (verified in core `dev`,
+2026-11-15):
 
-Rule texts: <https://contributors.home-assistant.io/core/quality-scale/rules/>.
-Read the library-related ones before designing the public API.
+- `requires-python` may have a lower bound only. No upper bounds on `aiohttp`
+  or `yarl` below a major version.
+- Forbidden runtime dependencies include `async-timeout`, `backoff`,
+  `setuptools` and any `types-*`.
+- The wheel must not contain top-level `tests`, `docs` or `py.typed`.
+- Licence metadata as an SPDX `License-Expression`; GPL is refused in review.
+- The "Check requirements" bot wants a repository URL in `project.urls`, a
+  PyPI release with a Trusted Publisher attestation, a tag `vX.Y.Z` matching
+  each release, and no blocking calls in `async def`.
+
+From core's "Build a Python library" page: represent the data the way the API
+does and do not interpret it; raise the library's own exceptions so the
+integration can tell failure kinds apart; do not retry, cache or log errors.
+That is why the SmartSymbol code is passed through unmapped: the mapping to
+Home Assistant conditions belongs in the integration.
+
+Rule texts: <https://contributors.home-assistant.io/core/quality-scale/>
+(a rule is at `/core/quality-scale/<rule>/`).
 
 ## Scope
 
@@ -48,59 +89,88 @@ Keep it to what the integration needs. Other FMI integrations grew wide
 (station catalogues, lightning, sea level, radiation); that is the main thing
 to avoid here.
 
-- **First:** point forecast by latitude and longitude, as a typed time series.
-- **Likely next:** resolving a place name to coordinates, the latest
-  observations from a station, weather warnings (CAP feed).
+- **Done:** point forecast by latitude and longitude, daily aggregation.
+- **Likely next:** the latest observations from a station, weather warnings
+  (CAP 1.2 Atom feeds at `https://alerts.fmi.fi/cap/feed/atom_{fi-FI,sv-FI,en-GB}.xml`).
 - **Not planned:** grids, radar, soundings, WMS, a generic stored-query
-  browser.
+  browser, place-name search (`place=` silently picks one of several matches,
+  so it is not usable as a geocoder).
 
-The Home Assistant weather entity needs a condition, the current values, and
-hourly and daily forecasts. FMI serves a point time series only, so daily
-values have to be aggregated by local day somewhere. Whether that lives here
-or in the integration is undecided.
+## Decisions
+
+- **Transport: WFS, not the JSON `timeseries` endpoint.** Both serve the same
+  data (compared over 232 rows). FMI announced `timeseries` in 2021 as
+  "originally planned for internal use" and unsupported by the help desk, and
+  it fails silently: an unknown parameter gives a column of nulls, and a point
+  outside the area is served from another model. If WFS ever becomes a
+  problem, only `_wfs.py` and the request in `client.py` change.
+- **XML parsing: the standard library** (user's decision). Match elements by
+  local name with `{*}` so a schema version bump does not break parsing.
+  `Element.iter()` does not accept `{*}`; use `findall()`.
+- **Daily aggregation lives here** (user's decision), as a pure function with
+  an explicit, optional time zone.
+- **SmartSymbol, not WeatherSymbol3.** FMI calls it the preferred code, and it
+  encodes day and night (code + 100 at night), so no sun calculation is needed.
+- **`aiohttp` is the only runtime dependency.** Models are plain frozen
+  dataclasses.
 
 ## FMI API notes
 
-Collected by reading other clients' code, not verified against the live
-service in this repo. Confirm each against real responses before relying on
-it, and save the responses as test fixtures.
+Verified against the live service on 2026-11-15 unless marked otherwise.
 
 - Endpoint: `https://opendata.fmi.fi/wfs`, WFS 2.0.0 `getFeature` with a
   `storedquery_id`. No account or API key.
-- Point forecast query used by the existing clients:
-  `fmi::forecast::edited::weather::scandinavia::point::multipointcoverage`,
-  with `latlon=<lat>,<lon>` (or `place=<name>`), `starttime`, `endtime`,
-  `timestep` (minutes) and `parameters` (comma-separated).
-- Parameters seen in use: `Temperature`, `DewPoint`, `Pressure`, `Humidity`,
-  `WindDirection`, `WindSpeedMS`, `WindGust`, `HourlyMaximumGust`,
-  `WeatherSymbol3`, `TotalCloudCover`, `Precipitation1h`, `PoP`,
-  `ProbabilityThunderstorm`.
-- A multipointcoverage response carries the field names in `swe:field`
-  elements, one "lat lon unix-time" triple per row in `gmlcov:positions`, and
-  the values in `gml:doubleOrNilReasonTupleList`, with `NaN` for missing.
-- Observations: `fmi::observations::weather::multipointcoverage` with
-  `fmisid=<station>`. The `::simple` form returns one element per value.
-- Errors: HTTP 400 with an `ExceptionReport` whose `ExceptionText` elements
-  give the reason, for example a too-long time range or no data for the
-  place. A 200 response can also be empty (`numberMatched="0"`).
-- FMI limits request rates and the time range per query. Look up the current
-  limits in FMI's open data documentation and design polling around them.
+- Query: `fmi::forecast::edited::weather::scandinavia::point::multipointcoverage`
+  with `latlon=<lat>,<lon>`, `starttime`, `endtime`, `timestep` (minutes) and
+  `parameters`. This is the forecaster-edited product shown on fmi.fi.
+- Send times as `...Z`. `jesmak/fmi` notes that a `+00:00` suffix reaches the
+  server as a space (not verified here).
+- The horizon is about 9.7 days. Later rows are returned filled with `NaN`,
+  so they are dropped. There is no time-range limit on the forecast query
+  (observations are limited to 168 hours).
+- Native resolution appears to be hourly to about +36 h, then 3-hourly, then
+  6-hourly; the server interpolates onto the requested step.
+- `timestep` must be a value the server accepts (60, 180 and 1440 work, 7 does
+  not). Steps align to 00:00 UTC, so `timestep=1440` cannot give local days.
+- `WindGust` is always `NaN` in this product; `HourlyMaximumGust` has values.
+- Field names in `swe:field` echo the spelling of the request.
+- The response gives the IANA time zone of the point (`target:timezone`) and a
+  reverse-geocoded place name that is not a stable identifier.
+- Errors are HTTP 400 with an OWS `ExceptionReport`. Every forecast error has
+  the code `OperationParsingFailed`, so only the text tells them apart:
+  outside the area is `No data available for '<place>'!`. The last
+  `ExceptionText` echoes the request URI with the coordinates and is dropped.
+- A 200 with `numberMatched="0"` occurs when the location is missing or
+  `endtime` precedes `starttime`. Other statuses can have an HTML body.
+- Forecast responses carry `Cache-Control: max-age=21600` and a gateway cache
+  sits in front; use the analysis time, not the response timestamp, as the age
+  of the data.
+- Limits: 20 000 requests a day and 600 per 5 minutes per user. What a refusal
+  looks like is **not verified**; the client treats HTTP 429 as the rate limit.
+- **Not verified:** that `Precipitation1h` covers the hour ending at the
+  timestamp. `daily_forecasts` assumes so.
+- Licence of the data: CC BY 4.0. FMI's logo may not be used with open data
+  products, which matters for the Home Assistant brands submission.
+- Changelog to watch: <https://en.ilmatieteenlaitos.fi/open-data-changelog>.
 
 ## Prior art
 
-Read for behaviour and API knowledge. **Do not copy code from the GPL ones**
-unless this project also ends up GPL.
+Read for behaviour and API knowledge. **Do not copy code from the GPL ones.**
 
 | Project | Licence | Notes |
-|---|---|---|
-| `fmi-weather-client` (PyPI; Codeberg `saaste`) | GPL-3.0 | Sync `requests`, `async_*` names are executor wrappers, no `py.typed`. What the existing custom integration uses. |
-| `pnuu/fmiopendata` | GPL-3.0-or-later | General WFS/WMS toolkit with numpy. Good reference for station and multipoint parsing. Its author is a colleague of the user. |
-| `kogeler/fmi-hass-custom` | MIT | Custom integration, domain `fmi`. Wraps `fmi-weather-client` and adds gust and probability parameters; its `fmi_client.py` shows which fields an integration ends up needing. |
-| `jesmak/fmi` | MIT | Custom integration, domain `fmi_open_data`. Its `session.py` has careful WFS error handling and coverage parsing. |
-| `pyforeca` (PyPI) | not checked | The library behind core's Foreca integration. Not yet read; worth studying as an accepted example of the same shape. |
+| --- | --- | --- |
+| `fmi-weather-client` (PyPI; Codeberg `saaste`) | GPL-3.0 | Sync `requests`, no `py.typed`. What the existing custom integration uses. |
+| `pnuu/fmiopendata` | GPL-3.0-or-later | General WFS/WMS toolkit with numpy. Its author is a colleague of the user. |
+| `kogeler/fmi-hass-custom` | MIT | Custom integration, domain `fmi`. Its WeatherSymbol3 condition table has errors; do not reuse it. |
+| `jesmak/fmi` | MIT | Custom integration, domain `fmi_open_data`. Uses SmartSymbol and one request per refresh, as this library does. |
+| `pyforeca` | MIT | The library behind core's Foreca integration. Same shape; it returns timestamps as strings and has no parse exception, which this library improves on. |
+
+Four core PRs for an FMI integration were opened in 2020–21 and none merged.
+They failed on scope and integration design, not on the library: keep the
+first PR to the weather platform, config flow only, one coordinator.
 
 A custom integration overrides a core one with the same domain, and `fmi` is
-taken by kogeler's. The core integration's domain is an open decision.
+taken by kogeler's.
 
 ## Preferences and constraints
 
@@ -109,16 +179,10 @@ taken by kogeler's. The core integration's domain is an open decision.
 - Code, comments and docs are in English.
 - Core reviewers are told to flag comments that over-explain or read like AI
   commentary. Write comments only for non-obvious constraints, here as well.
+- Commit locally on `main` in logical steps; push only when the user asks.
 
 ## Open decisions (the user's to make)
 
-- **XML parsing.** Standard library `xml.etree.ElementTree` or a dependency.
-- **Where daily aggregation lives** (see Scope).
 - **The core integration's domain** (see Prior art).
-
-## Working on the code
-
-Nothing is set up yet. When the tooling is chosen, record here the commands to
-create the environment, run the tests, lint and type-check, and how releases
-are made.
-
+- **One config entry per location, or one entry with location subentries.**
+  Foreca uses subentries because of its account key; FMI has no key.
