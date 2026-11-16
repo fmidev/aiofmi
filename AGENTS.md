@@ -198,8 +198,14 @@ taken by kogeler's.
 - **The core integration's domain** (see Prior art): the identifier that
   names `homeassistant/components/<domain>/`, the manifest, the config
   entries and the documentation URL; it cannot be changed after release
-  without a migration. `fmi` collides with kogeler's custom integration, which
-  would then silently override the core one for its users.
+  without a migration. `fmi` collides with kogeler's custom integration
+  (active, in the default Marketplace list, config entry version 2). Where
+  it is installed it silently replaces the core one and hides it from "Add
+  integration"; its entries cannot be taken over without a core migration
+  for a custom integration's data, so switching means deleting them first.
+  Precedent for taking the domain anyway: core `nordpool` shares its domain
+  with the custom `custom-components/nordpool`. Verified in core `dev`
+  `loader.py` and `config_entries.py`, 2026-11-16.
 - **One config entry per location, or one entry with location subentries.**
   SMHI and Met.no use one entry per location; Foreca uses subentries because
   of its account key, and FMI has no key.
