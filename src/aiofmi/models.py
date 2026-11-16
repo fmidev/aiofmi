@@ -70,7 +70,7 @@ class ForecastPoint:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Forecast:
+class PointForecast:
     """A point forecast as a time series."""
 
     location: Location
@@ -103,9 +103,10 @@ class DailyForecast:
     wind_gust: float | None
     """Highest gust, m/s."""
     smart_symbol: int | None
-    """SmartSymbol code of the daytime point closest to 14:00 local time.
+    """SmartSymbol code at 15:00 local time, as on FMI's own services.
 
-    When the sun does not rise during the day's points, a night-time code.
+    On the first day, the code closest to 15:00, which after 15:00 can be a
+    night-time code.
     """
 
     @property

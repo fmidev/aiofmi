@@ -47,7 +47,7 @@ The client never creates or closes a session.
 
 ### `await client.forecast(latitude, longitude, *, start=None, end=None)`
 
-Returns a `Forecast`:
+Returns a `PointForecast`:
 
 | Attribute | Contents |
 | --- | --- |
@@ -81,13 +81,16 @@ Groups the points by calendar day and returns `DailyForecast`s with
 `temperature_max`, `temperature_min`, `precipitation` (sum),
 `precipitation_probability` (highest), `wind_speed` (highest),
 `wind_direction` (at the highest wind speed), `wind_gust` (highest),
-`smart_symbol` (of the daytime point closest to 14:00; `symbol` is the code
+`smart_symbol` (at 15:00, as on FMI's own services; `symbol` is the code
 without the night offset) and the day's `points`.
 
 Days are those of `tz`, by default the time zone of the forecast location.
 Looking that up reads the system's time zone database, so pass `tz` when
-calling from an event loop. The first and last day cover only the hours the
-series contains; check `len(day.points)` if partial days matter. Each
+calling from an event loop.
+
+The first day covers only the hours the series contains, and its symbol is
+the one closest to 15:00. The last day is left out when the series ends
+before 15:00 on it, so that every day is described by the same hour. Each
 precipitation value covers the preceding hour and counts towards the day in
 which that hour began.
 

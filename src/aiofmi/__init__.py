@@ -11,7 +11,7 @@ from .exceptions import (
     FmiResponseError,
     FmiTimeoutError,
 )
-from .models import DailyForecast, Forecast, ForecastPoint, Location
+from .models import DailyForecast, ForecastPoint, Location, PointForecast
 
 __all__ = [
     "DailyForecast",
@@ -23,8 +23,8 @@ __all__ = [
     "FmiRequestError",
     "FmiResponseError",
     "FmiTimeoutError",
-    "Forecast",
     "ForecastPoint",
     "Location",
+    "PointForecast",
     "daily_forecasts",
 ]

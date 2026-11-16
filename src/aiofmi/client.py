@@ -14,7 +14,7 @@ from .exceptions import (
     FmiResponseError,
     FmiTimeoutError,
 )
-from .models import Forecast
+from .models import PointForecast
 
 WFS_URL = "https://opendata.fmi.fi/wfs"
 
@@ -61,7 +61,7 @@ class FmiClient:
         *,
         start: datetime | None = None,
         end: datetime | None = None,
-    ) -> Forecast:
+    ) -> PointForecast:
         """Fetch FMI's official forecast for a point in Finland or nearby.
 
         The hourly series runs from ``start`` (default: the beginning of the

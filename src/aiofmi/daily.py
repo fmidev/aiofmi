@@ -4,9 +4,10 @@ from collections.abc import Callable, Iterable
 from datetime import date, datetime, time, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .models import DailyForecast, Forecast, ForecastPoint
+from .models import DailyForecast, ForecastPoint, PointForecast
 
-_SYMBOL_TIME = time(14)
+# FMI's own services describe a day by its weather at 15:00.
+_DAY_TIME = time(15)
 _ACCUMULATION_PERIOD = timedelta(hours=1)
 
 
@@ -16,21 +17,21 @@ def _values(
     return [value for point in points if (value := getter(point)) is not None]
 
 
-def _afternoon_distance(moment: datetime) -> timedelta:
-    return abs(
-        moment.replace(tzinfo=None) - datetime.combine(moment.date(), _SYMBOL_TIME)
-    )
+def _distance_from_day_time(moment: datetime) -> timedelta:
+    return abs(moment.replace(tzinfo=None) - datetime.combine(moment.date(), _DAY_TIME))
 
 
 def daily_forecasts(
-    forecast: Forecast, tz: tzinfo | None = None
+    forecast: PointForecast, tz: tzinfo | None = None
 ) -> tuple[DailyForecast, ...]:
     """Aggregate a forecast by calendar day.
 
     Days are those of ``tz``, which defaults to the time zone of the forecast
-    location. The first and the last day cover only the part of the day that
-    the series contains. Precipitation counts towards the day in which the
-    hour it accumulated over began, so the series must be hourly.
+    location. The weather symbol of a day is the one at 15:00. The first day
+    covers only the part of the day that the series contains, and its symbol
+    is the one closest to 15:00. The last day is left out when the series ends
+    before 15:00 on it. Precipitation counts towards the day in which the hour
+    it accumulated over began, so the series must be hourly.
 
     The default time zone is read from the system's time zone database, which
     blocks; pass ``tz`` when calling from an event loop.
@@ -56,6 +57,11 @@ def daily_forecasts(
             accumulated_on = (point.time - _ACCUMULATION_PERIOD).astimezone(tz).date()
             precipitation.setdefault(accumulated_on, []).append(point.precipitation)
 
+    if len(days) > 1:
+        last_day = next(reversed(days))
+        if days[last_day][-1][0].time() < _DAY_TIME:
+            del days[last_day]
+
     result: list[DailyForecast] = []
     for day, entries in days.items():
         points = tuple(point for _, point in entries)
@@ -67,16 +73,9 @@ def daily_forecasts(
             key=lambda point: point.wind_speed or 0,
             default=None,
         )
-        symbols = [
-            (
-                not point.is_daytime,
-                _afternoon_distance(local),
-                index,
-                point.smart_symbol,
-            )
-            for index, (local, point) in enumerate(entries)
-            if point.smart_symbol is not None
-        ]
+        _, symbol_point = min(
+            entries, key=lambda entry: _distance_from_day_time(entry[0])
+        )
         result.append(
             DailyForecast(
                 date=day,
@@ -88,7 +87,7 @@ def daily_forecasts(
                 wind_speed=windiest.wind_speed if windiest else None,
                 wind_direction=windiest.wind_direction if windiest else None,
                 wind_gust=max(gusts, default=None),
-                smart_symbol=min(symbols)[-1] if symbols else None,
+                smart_symbol=symbol_point.smart_symbol,
             )
         )
     return tuple(result)

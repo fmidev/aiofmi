@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from xml.etree import ElementTree as ET
 
 from .exceptions import FmiNoDataError, FmiRequestError, FmiResponseError
-from .models import Forecast, ForecastPoint, Location
+from .models import ForecastPoint, Location, PointForecast
 
 # Model field -> FMI parameter. The request is built from the same table.
 FORECAST_PARAMETERS = {
@@ -109,7 +109,7 @@ def _location(observation: ET.Element) -> Location:
     )
 
 
-def parse_forecast(body: bytes) -> Forecast:
+def parse_forecast(body: bytes) -> PointForecast:
     """Parse a multipointcoverage point forecast."""
     observation = _parse_xml(body).find("{*}member/{*}GridSeriesObservation")
     if observation is None:
@@ -159,7 +159,7 @@ def parse_forecast(body: bytes) -> Forecast:
         msg = "FMI has no forecast values for the requested time range"
         raise FmiNoDataError(msg)
 
-    return Forecast(
+    return PointForecast(
         location=_location(observation),
         issued=_time(
             observation, "{*}parameter/{*}NamedValue/{*}value//{*}timePosition"

@@ -13,8 +13,13 @@ Keep this file up to date as decisions are made and the code changes.
    on 2026-11-15).
 2. **In a fork of `home-assistant/core`:** a weather entity per location with a
    config flow and tests, submitted at Bronze with the weather platform only.
-   Foreca (added in HA 2026.11, library `pyforeca`) is the model: 30-minute
-   polling, one coordinator per location, `SingleCoordinatorWeatherEntity`.
+   Models to follow: **SMHI** (Platinum, library `pysmhi`) and **Met.no**
+   (set up by default for the home location, library `PyMetno`). Both have
+   one config entry per location, a `SingleCoordinatorWeatherEntity`,
+   `PARALLEL_UPDATES = 0` and hourly and daily forecasts; SMHI also offers
+   twice-daily. Met.no's home entry follows the home location (unique id
+   `home`); other entries use `"<lat>-<lon>"`. Foreca (HA 2026.11) is only
+   Bronze.
 3. **Follow-up PRs** raise the integration's quality-scale tier. The target is
    Platinum.
 
@@ -148,8 +153,13 @@ Verified against the live service on 2026-11-15 unless marked otherwise.
   of the data.
 - Limits: 20 000 requests a day and 600 per 5 minutes per user. What a refusal
   looks like is **not verified**; the client treats HTTP 429 as the rate limit.
-- **Not verified:** that `Precipitation1h` covers the hour ending at the
-  timestamp. `daily_forecasts` assumes so.
+- `Precipitation1h` is the amount accumulated during the hour ending at the
+  timestamp: "kello 12 kohdalla oleva arvo tarkoittaa ... kello 11–12"
+  (<https://www.ilmatieteenlaitos.fi/saapalvelut-verkossa>).
+- FMI's own services describe a day by its weather at 15:00: "Päivän kohdalla
+  oleva sääkuvake kertoo säästä klo 15, ei siis koko vuorokaudesta" (same
+  page). `daily_forecasts` follows this, and leaves out a last day that ends
+  before 15:00 (user's decision, 2026-11-16).
 - Licence of the data: CC BY 4.0. FMI's logo may not be used with open data
   products, which matters for the Home Assistant brands submission.
 - Changelog to watch: <https://en.ilmatieteenlaitos.fi/open-data-changelog>.
@@ -164,7 +174,8 @@ Read for behaviour and API knowledge. **Do not copy code from the GPL ones.**
 | `pnuu/fmiopendata` | GPL-3.0-or-later | General WFS/WMS toolkit with numpy. Its author is a colleague of the user. |
 | `kogeler/fmi-hass-custom` | MIT | Custom integration, domain `fmi`. Its WeatherSymbol3 condition table has errors; do not reuse it. |
 | `jesmak/fmi` | MIT | Custom integration, domain `fmi_open_data`. Uses SmartSymbol and one request per refresh, as this library does. |
-| `pyforeca` | MIT | The library behind core's Foreca integration. Same shape; it returns timestamps as strings and has no parse exception, which this library improves on. |
+| `pysmhi` | MIT | The library behind core's Platinum SMHI integration. Like FMI, SMHI serves a point series, and `pysmhi` builds the daily and twice-daily forecasts itself, by UTC day with the symbol from the first point at or after 12:00 UTC. A precedent for aggregating in the library. |
+| `pyforeca` | MIT | The library behind core's Bronze Foreca integration. It returns timestamps as strings and has no parse exception, which this library improves on. |
 
 Four core PRs for an FMI integration were opened in 2020–21 and none merged.
 They failed on scope and integration design, not on the library: keep the
@@ -184,6 +195,11 @@ taken by kogeler's.
 
 ## Open decisions (the user's to make)
 
-- **The core integration's domain** (see Prior art).
+- **The core integration's domain** (see Prior art): the identifier that
+  names `homeassistant/components/<domain>/`, the manifest, the config
+  entries and the documentation URL; it cannot be changed after release
+  without a migration. `fmi` collides with kogeler's custom integration, which
+  would then silently override the core one for its users.
 - **One config entry per location, or one entry with location subentries.**
-  Foreca uses subentries because of its account key; FMI has no key.
+  SMHI and Met.no use one entry per location; Foreca uses subentries because
+  of its account key, and FMI has no key.
