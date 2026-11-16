@@ -9,8 +9,8 @@ Keep this file up to date as decisions are made and the code changes.
 ## The plan
 
 1. **This repo:** the client library. Forecast by coordinates is implemented
-   (0.1.0, not yet released). Publish to PyPI as `aiofmi` (the name was free
-   on 2026-11-15).
+   (tagged `v0.1.0`, not yet on PyPI). Publish to PyPI as `aiofmi` (the name
+   was free on 2026-11-15).
 2. **In a fork of `home-assistant/core`:** a weather entity per location with a
    config flow and tests, submitted at Bronze with the weather platform only.
    Models to follow: **SMHI** (Platinum, library `pysmhi`) and **Met.no**
@@ -48,9 +48,12 @@ uv run mypy                                          # strict, over src and test
 - Tests use a local `aiohttp` test server through the client's `url` argument;
   there is no HTTP mocking library.
 
-**Releasing:** bump `version` in `pyproject.toml` (`uv version --bump ...`),
-commit, and publish a GitHub release tagged `vX.Y.Z` with release notes.
-`.github/workflows/release.yml` builds and uploads to PyPI with Trusted
+**Releasing:** the version comes from the git tag through `hatch-vcs` (user's
+decision); `pyproject.toml` has no version and `uv version --bump` does not
+apply. Create an annotated tag (`git tag -a vX.Y.Z`), push it, and publish a
+GitHub release from that tag with release notes. Untagged builds get versions
+like `0.1.1.dev3+g<hash>`. `.github/workflows/release.yml` checks out the full
+history so the tag is visible, then builds and uploads to PyPI with Trusted
 Publishing. One-time setup, not yet done: register a pending trusted publisher
 on PyPI for `aiofmi` (repository `fmidev/aiofmi`, workflow `release.yml`,
 environment `pypi`) and create the `pypi` environment in the repository.

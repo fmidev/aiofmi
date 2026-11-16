@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.27", "hatch-vcs>=0.5"]
 build-backend = "hatchling.build"
 
 [project]
 name = "aiofmi"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Async client for the Finnish Meteorological Institute's open data"
 readme = "README.md"
 license = "MIT"
@@ -38,8 +38,14 @@ dev = [
     "ruff>=0.17",
 ]
 
+[tool.hatch.version]
+source = "vcs"
+
 [tool.hatch.build.targets.sdist]
 include = ["/src", "/tests", "/README.md", "/LICENSE"]
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
