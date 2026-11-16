@@ -116,6 +116,15 @@ to avoid here.
   an explicit, optional time zone.
 - **SmartSymbol, not WeatherSymbol3.** FMI calls it the preferred code, and it
   encodes day and night (code + 100 at night), so no sun calculation is needed.
+- **The core integration's domain is `fmi`** (user's decision, 2026-11-16),
+  although kogeler's custom integration (active, in the default Marketplace
+  list) uses it too. Where that is installed it replaces the core one and
+  hides it from "Add integration". Its entries (config entry version 2) cannot
+  be taken over, so the integration docs should tell its users to delete
+  their entries before uninstalling it, then add the core integration.
+  Precedent: core `nordpool` shares its domain with the custom
+  `custom-components/nordpool`, which caused only brief confusion.
+  Telling kogeler before the core PR would help their users.
 - **`aiohttp` is the only runtime dependency.** Models are plain frozen
   dataclasses.
 
@@ -181,8 +190,8 @@ Four core PRs for an FMI integration were opened in 2020–21 and none merged.
 They failed on scope and integration design, not on the library: keep the
 first PR to the weather platform, config flow only, one coordinator.
 
-A custom integration overrides a core one with the same domain, and `fmi` is
-taken by kogeler's.
+A custom integration overrides a core one with the same domain; see the
+domain decision.
 
 ## Preferences and constraints
 
@@ -195,17 +204,6 @@ taken by kogeler's.
 
 ## Open decisions (the user's to make)
 
-- **The core integration's domain** (see Prior art): the identifier that
-  names `homeassistant/components/<domain>/`, the manifest, the config
-  entries and the documentation URL; it cannot be changed after release
-  without a migration. `fmi` collides with kogeler's custom integration
-  (active, in the default Marketplace list, config entry version 2). Where
-  it is installed it silently replaces the core one and hides it from "Add
-  integration"; its entries cannot be taken over without a core migration
-  for a custom integration's data, so switching means deleting them first.
-  Precedent for taking the domain anyway: core `nordpool` shares its domain
-  with the custom `custom-components/nordpool`. Verified in core `dev`
-  `loader.py` and `config_entries.py`, 2026-11-16.
 - **One config entry per location, or one entry with location subentries.**
   SMHI and Met.no use one entry per location; Foreca uses subentries because
   of its account key, and FMI has no key.
