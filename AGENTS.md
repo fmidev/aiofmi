@@ -125,6 +125,9 @@ to avoid here.
   Precedent: core `nordpool` shares its domain with the custom
   `custom-components/nordpool`, which caused only brief confusion.
   Telling kogeler before the core PR would help their users.
+- **One config entry per location** (user's decision, 2026-11-16), as SMHI
+  and Met.no do. FMI has no account key that would call for a parent entry
+  with location subentries, as Foreca has.
 - **`aiohttp` is the only runtime dependency.** Models are plain frozen
   dataclasses.
 
@@ -201,9 +204,3 @@ domain decision.
 - Core reviewers are told to flag comments that over-explain or read like AI
   commentary. Write comments only for non-obvious constraints, here as well.
 - Commit locally on `main` in logical steps; push only when the user asks.
-
-## Open decisions (the user's to make)
-
-- **One config entry per location, or one entry with location subentries.**
-  SMHI and Met.no use one entry per location; Foreca uses subentries because
-  of its account key, and FMI has no key.
